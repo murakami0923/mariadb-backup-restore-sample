@@ -1,0 +1,1 @@
+* * * * * /root/update-db.sh >> /root/cron-update-db.log 2>&1
