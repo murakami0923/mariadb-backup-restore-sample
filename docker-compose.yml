@@ -2,7 +2,7 @@ version : "3"
 services:
   db:
     image: mariadb:latest
-    restart: always
+    # restart: always
     ports:
       - 3306:3306
     volumes:
@@ -13,4 +13,16 @@ services:
       - MYSQL_DATABASE=test
       - MYSQL_USER=user
       - MYSQL_PASSWORD=pwd
+
+  app:
+    build: dockerfile/app
+    tty: true
+    depends_on:
+      - "db"
+    environment:
+      - MYSQL_PWD=pwd
+      - DB_HOST=db
+      - DB_NAME=test
+      - DB_USER=user
+      - DB_PWD=pwd
 
