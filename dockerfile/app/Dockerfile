@@ -11,7 +11,6 @@ COPY init-db.sql /root/
 
 COPY update-db.sh /root/
 RUN chmod a+x /root/update-db.sh
-COPY update-db.sql /root/
 COPY cron /root/
 
 COPY startup.sh /root/
