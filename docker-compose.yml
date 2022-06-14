@@ -8,6 +8,7 @@ services:
     volumes:
       - "./mysql:/var/lib/mysql"
       - "./initdb.d:/docker-entrypoint-initdb.d"
+      - "./db/my.cnf:/etc/alternatives/my.cnf"
     environment:
       - MYSQL_ROOT_PASSWORD=pwd
       - MYSQL_DATABASE=test
