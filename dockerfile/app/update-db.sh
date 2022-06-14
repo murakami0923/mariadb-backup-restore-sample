@@ -16,7 +16,7 @@ for i in `seq 0 ${interval} 59`; do
     created_at=`date '+%Y-%m-%d %H:%M:%S'`
 
     sql="INSERT INTO test_data (name, created_at) VALUES ('${name_sum}', '${created_at}');"
-    echo ${sql} >> /root/logs/update-db-`date '+%Y%m%d'`.log 2>&1
+    # echo ${sql} >> /root/logs/update-db-`date '+%Y%m%d'`.log 2>&1
 
     mysql -h ${DB_HOST} -u ${DB_USER} ${DB_NAME} -e "${sql}" >> /root/logs/update-db-`date '+%Y%m%d'`.log 2>&1
 done
