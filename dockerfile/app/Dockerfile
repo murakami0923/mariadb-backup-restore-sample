@@ -3,6 +3,8 @@ FROM ubuntu:22.04
 RUN apt update
 RUN apt upgrade -y
 RUN apt install -y cron
+RUN apt install -y vim
+RUN apt install -y less
 RUN apt install -y mysql-client
 
 COPY init-db.sh /root/
