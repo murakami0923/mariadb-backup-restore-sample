@@ -15,7 +15,8 @@
   - [DBを更新するアプリケーションを停止](#dbを更新するアプリケーションを停止)
   - [DBの更新が止まることを確認](#dbの更新が止まることを確認)
   - [データを削除（ミスの操作を再現）](#データを削除ミスの操作を再現)
-  - [バイナリログから更新分のクエリを抽出](#バイナリログから更新分のクエリを抽出)
+  - [バイナリログから増分のクエリを抽出](#バイナリログから増分のクエリを抽出)
+  - [データベースの復旧](#データベースの復旧)
 - [サンプル補足](#サンプル補足)
   - [Docker環境定義について](#docker環境定義について)
 
@@ -152,7 +153,7 @@ MariaDB [(none)]> SHOW MASTER STATUS;
 mysqldump --single-transaction --flush-logs --master-data=2 {データベース名} > {バックアップファイル名}
 ```
 
-オプション
+オプション：
 
 | オプション | 値 | 解説 |
 | :- | :- | :- |
@@ -160,14 +161,13 @@ mysqldump --single-transaction --flush-logs --master-data=2 {データベース�
 | --flush-logs | (なし) | バイナリログをフラッシュします。（現在のバイナリログファイルを閉じ、新しいログファイルを次のシーケンス番号で開きます。）<br>これにより、新しいログファイルが、この完全バックアップより後の増分となります。 |
 | --master-data | 2 | mysqldumpの出力に、バイナリログ情報が書き込まれます。 |
 
-
 サンプルでは、まず、MariaDBコンテナに入ります。
 
 ```bash
 docker exec -ti mariadb-backup-restore-sample-db-1 /bin/bash
 ```
 
-次に、
+次にbashで下記を実行します。
 
 ```bash
 cd /var/lib/mysql/
@@ -237,7 +237,7 @@ crontab -e
 
 ## DBの更新が止まることを確認
 
-その後で、mysqlインタープリタで
+その後、mysqlインタープリタで
 
 ```sql
 SHOW MASTER STATUS; SELECT COUNT(*) FROM `test`.`test_data`;
@@ -280,15 +280,24 @@ SHOW MASTER STATUS; SELECT COUNT(*) FROM `test`.`test_data`;
 TRUNCATE TABLE `test_data`;
 ```
 
-## バイナリログから更新分のクエリを抽出
+## バイナリログから増分のクエリを抽出
 
 YYYY年MM月DD日　hh時mm分ss秒の時点まで戻したいとします。
+
+MariaDBのコンテナのbashで、
 
 ```bash
 mysqlbinlog --stop-datetime="YYYY-MM-DD hh:mm:ss" --database=${MYSQL_DATABASE} ｛バイナリログファイル｝ > incremental-backup-YYYYMMDD-hhmmss.sql
 ```
 
-のように実行すると、指定した時刻までの更新のクエリが抽出・保存されます。
+のように実行すると、指定した時刻までの増分のクエリが抽出・保存されます。
+
+オプション：
+
+| オプション | 値 | 解説 |
+| :- | :- | :- |
+| --stop-datetime | 復旧する日時 | "YYYY-MM-DD hh:mm:ss" の書式で指定します。 |
+| --databases | DB名 | 復旧するDB名を指定します。 |
 
 具体的：
 
@@ -298,6 +307,64 @@ mysqlbinlog --stop-datetime="2022-06-15 14:15:00" --database=${MYSQL_DATABASE} m
 
 ※可能であれば、ミスの操作をする前と、した後のログを抽出するといいでしょう。
 　（diffで、ミスの操作を確認することができます）
+
+## データベースの復旧
+
+DBを復旧するには、
+
+- DBを一旦削除
+- 完全バックアップからDBを作成
+- バイナリログから抽出した更新分のクエリを適用
+
+の手順で行います。
+
+MariaDBのコンテナのbashで、
+
+```bash
+export MYSQL_PWD=${MYSQL_ROOT_PASSWORD}
+mysql -u root -e "DROP DATABASE ${MYSQL_DATABASE};"
+mysql -u root -e "CREATE DATABASE ${MYSQL_DATABASE};"
+mysql -u root -e "FLUSH LOGS;"
+```
+
+を実行し、一旦DBを削除します。
+
+次に、完全バックアップのファイルでDBを作成します。
+
+```bash
+cd /var/lib/mysql/
+mysql -u root ${MYSQL_DATABASE} < {完全バックアップファイル名}
+```
+
+次に、バイナリログから抽出した増分のクエリで、増分を適用します。
+
+```bash
+mysql -u root ${MYSQL_DATABASE} < {増分のクエリファイル名}
+```
+
+実行できたら、mysqlインタープリタで
+
+```sql
+SHOW MASTER STATUS; SELECT COUNT(*) FROM `test`.`test_data`;
+```
+
+を実行します。
+
+```txt
++------------------+----------+--------------+------------------+
+| File             | Position | Binlog_Do_DB | Binlog_Ignore_DB |
++------------------+----------+--------------+------------------+
+| mysql-bin.000004 |   663283 |              |                  |
++------------------+----------+--------------+------------------+
+1 row in set (0.001 sec)
+
++----------+
+| COUNT(*) |
++----------+
+|     5532 |
++----------+
+1 row in set (0.009 sec)
+```
 
 
 # サンプル補足
