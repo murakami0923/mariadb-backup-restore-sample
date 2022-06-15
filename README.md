@@ -2,18 +2,20 @@
 
 - [MySQL、MariaDBでバックアップ、バイナリログから復旧する手順、サンプル (LinuxにMySQLをMariaDBをインストール)](#mysqlmariadbでバックアップバイナリログから復旧する手順サンプル-linuxにmysqlをmariadbをインストール)
 - [背景](#背景)
-- [やること](#やること)
-- [参考](#参考)
+- [本書およびサンプルの概要](#本書およびサンプルの概要)
+- [参考サイト](#参考サイト)
 - [注意、制約](#注意制約)
 - [前提](#前提)
   - [Linux、Docker、Docker Compose](#linuxdockerdocker-compose)
   - [MariaDBのバージョン](#mariadbのバージョン)
 - [解説](#解説)
-  - [実行環境](#実行環境)
   - [バイナリログ有効化](#バイナリログ有効化)
   - [バイナリログのファイル確認](#バイナリログのファイル確認)
   - [完全バックアップ](#完全バックアップ)
-  - [リストア](#リストア)
+  - [DBを更新するアプリケーションを停止](#dbを更新するアプリケーションを停止)
+  - [DBの更新が止まることを確認](#dbの更新が止まることを確認)
+  - [データを削除（ミスの操作を再現）](#データを削除ミスの操作を再現)
+  - [バイナリログから更新分のクエリを抽出](#バイナリログから更新分のクエリを抽出)
 - [サンプル補足](#サンプル補足)
   - [Docker環境定義について](#docker環境定義について)
 
@@ -30,27 +32,42 @@ DBを使ったWebサイトやシステムなどで、本番の更新・リリー
 作業手順のレビューをしたり、実施時にダブルチェックしたとしても、ミスを完全になくすのは不可能です。
 それに、Ansibleのように自動化する方法を使っても、定義を作るのは人なので、誤りを完全に防ぐことも不可能です。
 
-そこで、DBのバックアップとバイナリログで、「○○○○年○○月○○日 ○時○分の時点に戻したい」という願いを実現する方法を探ることにしました。
+そこで、上記のようなトラブルでDBを破壊したとしても、DBのバックアップとバイナリログで、「○○○○年○○月○○日 ○時○分の時点に戻したい」という願いを実現する方法を探ることにしました。
 
-# やること
+# 本書およびサンプルの概要
 
 `mysqldump`コマンドで完全バックアップをし、さらに、バイナリログを保存して増分バックアップとして使用し、DBを復旧する手順をまとめます。
-
 完全バックアップの作成、および、バイナリログからのSQL作成の際には、データベースを指定することとします。
 
-# 参考
+サンプルは、[https://github.com/murakami0923/mariadb-backup-restore-sample](https://github.com/murakami0923/mariadb-backup-restore-sample)に置いてあります。
+
+MariaDBと、そのDBを更新するアプリケーションを、それぞれDockerコンテナとして作成し、そのうえで、バックアップ・復旧を試せるようにします。
+
+各コンテナの概要：
+
+- MariaDBのコンテナ
+  - `my.cnf`でバイナリログを有効化します
+- アプリケーションのコンテナ
+  - 起動時に、MariaDBコンテナにテーブルがなければテーブルを作成します
+  - テーブルにレコードを登録（insert）するbashスクリプトをcronで定期的に呼び出します
+  - bashスクリプトでは、一定間隔（デフォルト：5秒間隔）でSQLを生成し、MariaDBコンテナにmysqlコマンドで接続して実行します。
+
+# 参考サイト
 
 [MySQL 5.6 リファレンスマニュアル - 7.3.1 バックアップポリシーの確立](https://dev.mysql.com/doc/refman/5.6/ja/backup-policy.html)
 
 # 注意、制約
 
+- テーブルはMySQLのInnoDBで作成したものとします。
 - DBの復旧の際は、DBを更新するサービスを停止して行うことを前提とします。
   - Webサーバやアプリケーションサーバを停止すると、アクセスしてもエラーになります。
   - あらかじめSorryページ等を用意しておくことが望ましいです。
+- DBサーバ（本サンプルではコンテナ）では、rootユーザーで接続する必要があります。
 - ファイル（画像、データファイル、レポートなど）のバックアップ、復旧は扱いません。
-- 本手順では、Linux等に自前でMySQLあるいはMariaDBをインストールして使用するケースを想定します。
+- 本手順では、Linux等のローカル環境に自前でMySQLあるいはMariaDBをインストールして使用するケースを想定します。
+  - サンプルでは、`mariadb`イメージのコンテナを使用します。
   - AWS RDS, Aurora等のマネージドクラウドサービスでは、別の復旧手順があるので、公式情報等をご参照ください。
-    - 余裕があったらAuroraでの復旧手順をまとめてみたい（やるとは言ってません）
+    - 余裕があったらAuroraでの復旧手順をまとめてみたい（約束はできません）
 
 # 前提
 ## Linux、Docker、Docker Compose
@@ -76,10 +93,6 @@ mysql  Ver 15.1 Distrib 10.7.4-MariaDB, for debian-linux-gnu (x86_64) using read
 ```
 
 # 解説
-## 実行環境
-
-docker-compose.ymlを参照
-
 ## バイナリログ有効化
 
 DBの設定ファイル`my.cnf`に、バイナリログを有効化するための設定を追記します。
@@ -97,7 +110,18 @@ log-bin=mysql-bin
 
 ## バイナリログのファイル確認
 
-`mysql`コマンドで`root`ユーザーで接続し、下記SQLを実行します。
+サンプルでは、まず、MariaDBコンテナに入ります。
+
+```bash
+docker exec -ti mariadb-backup-restore-sample-db-1 /bin/bash
+```
+
+次に、`mysql`コマンドで`root`ユーザーで接続し、下記SQLを実行します。
+
+```bash
+export MYSQL_PWD=${MYSQL_ROOT_PASSWORD}
+mysql -u root ${MYSQL_DATABASE}
+```
 
 ```sql
 SHOW MASTER STATUS;
@@ -106,7 +130,7 @@ SHOW MASTER STATUS;
 実行すると、
 
 ```txt
-MariaDB [(none)]> show master status;
+MariaDB [(none)]> SHOW MASTER STATUS;
 +------------------+----------+--------------+------------------+
 | File             | Position | Binlog_Do_DB | Binlog_Ignore_DB |
 +------------------+----------+--------------+------------------+
@@ -128,20 +152,152 @@ MariaDB [(none)]> show master status;
 mysqldump --single-transaction --flush-logs --master-data=2 {データベース名} > {バックアップファイル名}
 ```
 
---master-data=2
-mysqldumpの出力に、バイナリログ情報が書き込まれます。
+オプション
+
+| オプション | 値 | 解説 |
+| :- | :- | :- |
+| --single-transaction | (なし) | ダンプ処理をトランザクションで囲みます。データの整合性を保つのに有効です。ただし、MyISAMテーブルが含まれるDBでは意味が無いので、代わりに`--lock-tables`か`--lock-all-tables`を使いましょう。 |
+| --flush-logs | (なし) | バイナリログをフラッシュします。（現在のバイナリログファイルを閉じ、新しいログファイルを次のシーケンス番号で開きます。）<br>これにより、新しいログファイルが、この完全バックアップより後の増分となります。 |
+| --master-data | 2 | mysqldumpの出力に、バイナリログ情報が書き込まれます。 |
 
 
-
-例えば、本サンプル
+サンプルでは、まず、MariaDBコンテナに入ります。
 
 ```bash
-mysqldump --single-transaction --flush-logs --master-data=2 {データベース名} > {バックアップファイル名}
+docker exec -ti mariadb-backup-restore-sample-db-1 /bin/bash
 ```
 
+次に、
 
-## リストア
+```bash
+cd /var/lib/mysql/
+dump_file=app-full-`date '+%Y%m%d-%H%M%S'`.sql
+export MYSQL_PWD=${MYSQL_ROOT_PASSWORD}
+mysqldump --single-transaction --flush-logs --master-data=2 ${MYSQL_DATABASE} > ${dump_file}
+```
 
+その後で、mysqlインタープリタで
+
+```sql
+SHOW MASTER STATUS;
+```
+
+実行します。
+
+```txt
+MariaDB [test]> SHOW MASTER STATUS;
++------------------+----------+--------------+------------------+
+| File             | Position | Binlog_Do_DB | Binlog_Ignore_DB |
++------------------+----------+--------------+------------------+
+| mysql-bin.000003 |      699 |              |                  |
++------------------+----------+--------------+------------------+
+1 row in set (0.000 sec)
+```
+
+のように、`File`の項目の連番が増えて、`Position`の値が小さくなることを確認します。
+
+
+また、バックアップファイルに保存された、バイナリログの情報を確認します。
+
+```bash
+grep "CHANGE MASTER TO MASTER_LOG_FILE=" ${dump_file}
+```
+
+を実行すると、
+
+```txt
+-- CHANGE MASTER TO MASTER_LOG_FILE='mysql-bin.000003', MASTER_LOG_POS=385;
+```
+
+のように、バイナリログ情報が確認できます。
+
+## DBを更新するアプリケーションを停止
+
+リリースの際、まずDBへの更新を止め、アプリケーション等を更新することが多いと思います。
+
+サンプルでは、まず、アプリケーションコンテナに入ります。
+
+```bash
+docker exec -ti mariadb-backup-restore-sample-app-1 /bin/bash
+```
+
+次に、cronの設定を変更します。
+
+```bash
+crontab -e
+```
+
+でcronの設定のエディタが開くので、DB更新のシェルスクリプト呼び出しをコメントアウトします。
+
+```txt
+# * * * * * /root/update-db.sh >> /root/cron-update-db.log 2>&1
+```
+
+これで保存します。
+
+## DBの更新が止まることを確認
+
+その後で、mysqlインタープリタで
+
+```sql
+SHOW MASTER STATUS; SELECT COUNT(*) FROM `test`.`test_data`;
+```
+
+を実行します。
+
+```txt
++------------------+----------+--------------+------------------+
+| File             | Position | Binlog_Do_DB | Binlog_Ignore_DB |
++------------------+----------+--------------+------------------+
+| mysql-bin.000003 |   161153 |              |                  |
++------------------+----------+--------------+------------------+
+1 row in set (0.000 sec)
+
++----------+
+| COUNT(*) |
++----------+
+|     5532 |
++----------+
+1 row in set (0.008 sec)
+```
+
+バイナリログの状況と、テーブルのレコード数が表示されます。
+
+何度か実行し、更新が止まるまで待ちます。
+※1分ほどかかることがあります。
+
+更新が止まったら、上記を控えておきましょう。
+※あとで使います。
+
+## データを削除（ミスの操作を再現）
+
+ここで、リリース時にミスをしたとしましょう。
+たとえば、テーブルのデータを誤って消してしまったとします
+
+サンプルでは、下記SQLを実行します。（rootでmysqlにログイン）
+
+```sql
+TRUNCATE TABLE `test_data`;
+```
+
+## バイナリログから更新分のクエリを抽出
+
+YYYY年MM月DD日　hh時mm分ss秒の時点まで戻したいとします。
+
+```bash
+mysqlbinlog --stop-datetime="YYYY-MM-DD hh:mm:ss" --database=${MYSQL_DATABASE} ｛バイナリログファイル｝ > incremental-backup-YYYYMMDD-hhmmss.sql
+```
+
+のように実行すると、指定した時刻までの更新のクエリが抽出・保存されます。
+
+具体的：
+
+```bash
+mysqlbinlog --stop-datetime="2022-06-15 14:15:00" --database=${MYSQL_DATABASE} mysql-bin.000003 > incremental-backup-20220615-141500.sql
+```
+
+※可能であれば、ミスの操作をする前と、した後のログを抽出するといいでしょう。
+　（diffで、ミスの操作を確認することができます）
 
 
 # サンプル補足
