@@ -8,6 +8,7 @@
 - [前提](#前提)
   - [Linux、Docker、Docker Compose](#linuxdockerdocker-compose)
   - [MariaDBのバージョン](#mariadbのバージョン)
+- [サンプルの環境の起動](#サンプルの環境の起動)
 - [解説](#解説)
   - [バイナリログ有効化](#バイナリログ有効化)
   - [バイナリログのファイル確認](#バイナリログのファイル確認)
@@ -17,8 +18,6 @@
   - [データを削除（ミスの操作を再現）](#データを削除ミスの操作を再現)
   - [バイナリログから増分のクエリを抽出](#バイナリログから増分のクエリを抽出)
   - [データベースの復旧](#データベースの復旧)
-- [サンプル補足](#サンプル補足)
-  - [Docker環境定義について](#docker環境定義について)
 
 # 背景
 
@@ -93,6 +92,28 @@ mysql --version
 mysql  Ver 15.1 Distrib 10.7.4-MariaDB, for debian-linux-gnu (x86_64) using readline 5.2
 ```
 
+# サンプルの環境の起動
+
+まず、GitHubからリポジトリをcloneします。
+
+```bash
+git clone https://github.com/murakami0923/mariadb-backup-restore-sample.git
+```
+
+次に、リポジトリのディレクトリへ移動し、Docker Composeでコンテナを起動します。
+※初回の起動時は、Dockerfileをビルドしてイメージを作成するので、時間がかかります。
+
+```bash
+cd mariadb-backup-restore-sample/
+docker-compose up -d
+```
+
+使い終わったらコンテナを終了します。
+
+```bash
+docker-compose down
+```
+
 # 解説
 ## バイナリログ有効化
 
@@ -106,7 +127,6 @@ log-bin=mysql-bin
 設定ファイルについては、本サンプル（`mariadb:10.7.4`イメージのコンテナ）では`/etc/alternatives/my.cnf`ですが、環境によっては`/etc/my.cnf`に直接書かれている可能性もあり、設定する環境のファイルを調べます。
 
 なお、本サンプルでは、更新する前の`my.cnf`を予め取得し、さらにバイナリログ有効化の設定を追記した、`my.cnf`の完全版のファイルを、`db/my.cnf`に置いてあります。
-
 
 
 ## バイナリログのファイル確認
@@ -365,8 +385,3 @@ SHOW MASTER STATUS; SELECT COUNT(*) FROM `test`.`test_data`;
 +----------+
 1 row in set (0.009 sec)
 ```
-
-
-# サンプル補足
-## Docker環境定義について
-
