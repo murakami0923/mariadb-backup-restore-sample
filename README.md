@@ -100,8 +100,7 @@ mysql  Ver 15.1 Distrib 10.7.4-MariaDB, for debian-linux-gnu (x86_64) using read
 git clone https://github.com/murakami0923/mariadb-backup-restore-sample.git
 ```
 
-次に、リポジトリのディレクトリへ移動し、Docker Composeでコンテナを起動します。
-※初回の起動時は、Dockerfileをビルドしてイメージを作成するので、時間がかかります。
+次に、リポジトリのディレクトリへ移動し、Docker Composeでコンテナを起動します。<br>※初回の起動時は、Dockerfileをビルドしてイメージを作成するので、時間がかかります。
 
 ```bash
 cd mariadb-backup-restore-sample/
