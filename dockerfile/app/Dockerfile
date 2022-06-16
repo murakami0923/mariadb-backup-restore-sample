@@ -19,7 +19,7 @@ ENV LC_ALL ja_JP.UTF-8
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y tzdata
 # timezone setting
-ENV TZ=Asia/Tokyo 
+ENV TZ=Asia/Tokyo
 
 # アプリケーション用SQL、bash、cron
 COPY init-db.sh /root/
