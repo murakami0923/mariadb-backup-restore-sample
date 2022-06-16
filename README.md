@@ -249,7 +249,7 @@ crontab -e
 でcronの設定のエディタが開くので、DB更新のシェルスクリプト呼び出しをコメントアウトします。
 
 ```txt
-# * * * * * /root/update-db.sh >> /root/cron-update-db.log 2>&1
+# * * * * * export TZ=Asia/Tokyo; /root/update-db.sh >> /root/cron-update-db.log 2>&1
 ```
 
 これで保存します。
@@ -306,7 +306,7 @@ YYYY年MM月DD日　hh時mm分ss秒の時点まで戻したいとします。
 MariaDBのコンテナのbashで、
 
 ```bash
-mysqlbinlog --stop-datetime="YYYY-MM-DD hh:mm:ss" --database=${MYSQL_DATABASE} ｛バイナリログファイル｝ > incremental-backup-YYYYMMDD-hhmmss.sql
+mysqlbinlog --stop-datetime="YYYY-MM-DD hh:mm:ss" --database=${MYSQL_DATABASE} ｛バイナリログファイル｝ > app-incremental-backup-YYYYMMDD-hhmmss.sql
 ```
 
 のように実行すると、指定した時刻までの増分のクエリが抽出・保存されます。
@@ -321,7 +321,7 @@ mysqlbinlog --stop-datetime="YYYY-MM-DD hh:mm:ss" --database=${MYSQL_DATABASE} �
 具体的：
 
 ```bash
-mysqlbinlog --stop-datetime="2022-06-15 14:15:00" --database=${MYSQL_DATABASE} mysql-bin.000003 > incremental-backup-20220615-141500.sql
+mysqlbinlog --stop-datetime="2022-06-15 14:15:00" --database=${MYSQL_DATABASE} mysql-bin.000003 > app-incremental-backup-20220615-141500.sql
 ```
 
 ※可能であれば、ミスの操作をする前と、した後のログを抽出するといいでしょう。
