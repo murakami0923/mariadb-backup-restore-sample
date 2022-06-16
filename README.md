@@ -303,7 +303,11 @@ SHOW MASTER STATUS; SELECT COUNT(*) FROM `test`.`test_data`;
 
 ```sql
 TRUNCATE TABLE `test_data`;
+SELECT NOW();
 ```
+
+※削除した日時も表示します。
+
 
 ## バイナリログから増分のクエリを抽出
 
@@ -390,6 +394,9 @@ SHOW MASTER STATUS; SELECT COUNT(*) FROM `test`.`test_data`;
 +----------+
 1 row in set (0.009 sec)
 ```
+
+削除前のレコード数と同じで、復元に成功したことがわかります。
+※実際には、アプリケーションの動作確認などで、復元の確認が必要になることもあります。
 
 # おわりに
 
